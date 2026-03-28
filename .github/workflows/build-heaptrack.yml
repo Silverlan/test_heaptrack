@@ -8,16 +8,16 @@ on:
         required: true
         default: 'v1.5.0-build'
       heaptrack_ref:
-        description: 'Branch or tag to build (e.g., master, v1.5.0)'
+        description: 'Branch or tag to build (v1.5.0 is recommended for GUI)'
         required: true
-        default: 'master'
+        default: 'v1.5.0'
 
 permissions:
   contents: write
 
 jobs:
   build-and-release:
-    name: Build on Ubuntu
+    name: Build on Ubuntu 24.04
     runs-on: ubuntu-latest
 
     steps:
@@ -25,18 +25,22 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: kde/heaptrack
-          # Use the input ref; default is 'master'
           ref: ${{ github.event.inputs.heaptrack_ref }}
 
       - name: Install System Dependencies
         run: |
           sudo apt-get update
+          # Core build tools and performance libs
           sudo apt-get install -y build-essential cmake extra-cmake-modules \
             zlib1g-dev libzstd-dev libunwind-dev \
             libboost-system-dev libboost-filesystem-dev libboost-iostreams-dev \
             libboost-program-options-dev libboost-container-dev \
-            libelf-dev libdw-dev gettext \
+            libelf-dev libdw-dev gettext
+
+          # Qt5 and KDE Frameworks 5 (Specifically for Ubuntu 24.04)
+          sudo apt-get install -y \
             qtbase5-dev \
+            libqt5svg5-dev \
             libkf5coreaddons-dev \
             libkf5i18n-dev \
             libkf5itemmodels-dev \
@@ -52,10 +56,11 @@ jobs:
         run: |
           mkdir build
           cd build
-          # Force Qt5 and standard install paths
+          # We don't need QT_MAJOR_VERSION=5 for v1.5.0, it finds it automatically.
+          # We use -DHEAPTRACK_BUILD_GUI=ON to ensure it fails here if deps are missing.
           cmake -DCMAKE_BUILD_TYPE=Release \
                 -DCMAKE_INSTALL_PREFIX=/usr \
-                -DQT_MAJOR_VERSION=5 ..
+                -DHEAPTRACK_BUILD_GUI=ON ..
 
       - name: Build Heaptrack
         run: |
@@ -64,27 +69,24 @@ jobs:
 
       - name: Verify GUI Build
         run: |
-          # Ensure the GUI binary actually exists before proceeding
           if [ ! -f "build/bin/heaptrack_gui" ]; then
-            echo "::error::heaptrack_gui binary was not generated. Check CMake logs."
+            echo "::error::GUI binary not found! Check the logs above."
             exit 1
           fi
 
-      - name: Package the Build
+      - name: Package and Release
         run: |
           cd build
           make install DESTDIR=../heaptrack-staging
           cd ../heaptrack-staging
           tar -czvf ../heaptrack-ubuntu-latest.tar.gz .
 
-      - name: Publish GitHub Release
+      - name: Publish Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag_name }}
-          name: "Heaptrack Build (${{ github.event.inputs.heaptrack_ref }})"
+          name: "Heaptrack ${{ github.event.inputs.heaptrack_ref }}"
           files: heaptrack-ubuntu-latest.tar.gz
-          body: "Automated build of heaptrack branch/tag: ${{ github.event.inputs.heaptrack_ref }}"
-          draft: false
-          prerelease: false
+          body: "Release build of Heaptrack ${{ github.event.inputs.heaptrack_ref }} for Ubuntu."
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
