@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Tag for the release (e.g., v1.4.0 or nightly)'
+        description: 'Tag for the release (e.g., v1.6.0)'
         required: true
         default: 'nightly'
       branch:
@@ -12,7 +12,6 @@ on:
         required: true
         default: 'master'
 
-# Give the workflow permission to create a release in your repository
 permissions:
   contents: write
 
@@ -31,24 +30,36 @@ jobs:
       - name: Install System Dependencies
         run: |
           sudo apt-get update
-          # Install C++ build tools, compression libs, and elfutils
+          # Core build tools and compression
           sudo apt-get install -y build-essential cmake extra-cmake-modules \
             zlib1g-dev libzstd-dev libunwind-dev \
-            libboost-system-dev libboost-filesystem-dev libboost-iostreams-dev libboost-program-options-dev \
-            libelf-dev libdw-dev
-            
-          # Install Qt5 and KDE Frameworks 5 dependencies for the GUI
-          sudo apt-get install -y qtbase5-dev \
-            libkf5coreaddons-dev libkf5i18n-dev libkf5itemmodels-dev \
-            libkf5threadweaver-dev libkf5configwidgets-dev libkf5kio-dev \
-            libkf5iconthemes-dev
+            libboost-system-dev libboost-filesystem-dev libboost-iostreams-dev \
+            libboost-program-options-dev libboost-container-dev \
+            libelf-dev libdw-dev gettext
+
+          # Install Qt6 and KF6 dependencies for the GUI
+          sudo apt-get install -y \
+            qt6-base-dev \
+            qt6-base-private-dev \
+            libqt6widgets6 \
+            libkf6coreaddons-dev \
+            libkf6i18n-dev \
+            libkf6itemmodels-dev \
+            libkf6threadweaver-dev \
+            libkf6configwidgets-dev \
+            libkf6kio-dev \
+            libkf6iconthemes-dev \
+            libkf6widgetsaddons-dev \
+            libkf6notifications-dev
 
       - name: Configure CMake
         run: |
           mkdir build
           cd build
-          # We set the install prefix to /usr so the folder structure makes sense when extracted
-          cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr ..
+          # Explicitly tell CMake to look for Qt6
+          cmake -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_INSTALL_PREFIX=/usr \
+                -DQT_MAJOR_VERSION=6 ..
 
       - name: Build Heaptrack
         run: |
@@ -58,11 +69,8 @@ jobs:
       - name: Package the Build
         run: |
           cd build
-          # Install into a staging directory
           make install DESTDIR=../heaptrack-staging
           cd ../heaptrack-staging
-          
-          # Compress the staging directory into a tarball
           tar -czvf ../heaptrack-ubuntu-latest.tar.gz .
 
       - name: Publish GitHub Release
