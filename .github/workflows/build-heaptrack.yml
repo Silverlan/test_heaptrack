@@ -1,0 +1,77 @@
+name: Build and Release Heaptrack
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag for the release (e.g., v1.4.0 or nightly)'
+        required: true
+        default: 'nightly'
+      branch:
+        description: 'Branch or tag of kde/heaptrack to build'
+        required: true
+        default: 'master'
+
+# Give the workflow permission to create a release in your repository
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build on Ubuntu
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout kde/heaptrack
+        uses: actions/checkout@v4
+        with:
+          repository: kde/heaptrack
+          ref: ${{ github.event.inputs.branch }}
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          # Install C++ build tools, compression libs, and elfutils
+          sudo apt-get install -y build-essential cmake extra-cmake-modules \
+            zlib1g-dev libzstd-dev libunwind-dev \
+            libboost-system-dev libboost-filesystem-dev libboost-iostreams-dev libboost-program-options-dev \
+            libelf-dev libdw-dev
+            
+          # Install Qt5 and KDE Frameworks 5 dependencies for the GUI
+          sudo apt-get install -y qtbase5-dev \
+            libkf5coreaddons-dev libkf5i18n-dev libkf5itemmodels-dev \
+            libkf5threadweaver-dev libkf5configwidgets-dev libkf5kio-dev \
+            libkf5iconthemes-dev
+
+      - name: Configure CMake
+        run: |
+          mkdir build
+          cd build
+          # We set the install prefix to /usr so the folder structure makes sense when extracted
+          cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr ..
+
+      - name: Build Heaptrack
+        run: |
+          cd build
+          make -j$(nproc)
+
+      - name: Package the Build
+        run: |
+          cd build
+          # Install into a staging directory
+          make install DESTDIR=../heaptrack-staging
+          cd ../heaptrack-staging
+          
+          # Compress the staging directory into a tarball
+          tar -czvf ../heaptrack-ubuntu-latest.tar.gz .
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag_name }}
+          name: "Heaptrack Build ${{ github.event.inputs.tag_name }}"
+          files: heaptrack-ubuntu-latest.tar.gz
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
