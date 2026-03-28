@@ -4,13 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Tag for the release (e.g., v1.6.0)'
+        description: 'Tag for the release (e.g., v1.5.0)'
         required: true
-        default: 'nightly'
+        default: 'v1.5.0'
       branch:
         description: 'Branch or tag of kde/heaptrack to build'
         required: true
-        default: 'master'
+        default: 'stable'
 
 permissions:
   contents: write
@@ -30,41 +30,49 @@ jobs:
       - name: Install System Dependencies
         run: |
           sudo apt-get update
-          # Core build tools and compression
+          # Core build tools, compression, and missing Boost container
           sudo apt-get install -y build-essential cmake extra-cmake-modules \
             zlib1g-dev libzstd-dev libunwind-dev \
             libboost-system-dev libboost-filesystem-dev libboost-iostreams-dev \
             libboost-program-options-dev libboost-container-dev \
             libelf-dev libdw-dev gettext
 
-          # Install Qt6 and KF6 dependencies for the GUI
+          # Install Qt5 and KF5 dependencies (Available on Ubuntu 24.04)
           sudo apt-get install -y \
-            qt6-base-dev \
-            qt6-base-private-dev \
-            libqt6widgets6 \
-            libkf6coreaddons-dev \
-            libkf6i18n-dev \
-            libkf6itemmodels-dev \
-            libkf6threadweaver-dev \
-            libkf6configwidgets-dev \
-            libkf6kio-dev \
-            libkf6iconthemes-dev \
-            libkf6widgetsaddons-dev \
-            libkf6notifications-dev
+            qtbase5-dev \
+            libkf5coreaddons-dev \
+            libkf5i18n-dev \
+            libkf5itemmodels-dev \
+            libkf5itemviews-dev \
+            libkf5threadweaver-dev \
+            libkf5configwidgets-dev \
+            libkf5kio-dev \
+            libkf5iconthemes-dev \
+            libkf5widgetsaddons-dev \
+            libkf5windowsystem-dev
 
       - name: Configure CMake
         run: |
           mkdir build
           cd build
-          # Explicitly tell CMake to look for Qt6
+          # We explicitly force Qt5 to avoid the "Looking for Qt6" failure
           cmake -DCMAKE_BUILD_TYPE=Release \
                 -DCMAKE_INSTALL_PREFIX=/usr \
-                -DQT_MAJOR_VERSION=6 ..
+                -DQT_MAJOR_VERSION=5 ..
 
       - name: Build Heaptrack
         run: |
           cd build
           make -j$(nproc)
+
+      - name: Verify GUI Build
+        run: |
+          if [ -f "build/bin/heaptrack_gui" ]; then
+            echo "Success: heaptrack_gui was built."
+          else
+            echo "Error: heaptrack_gui was NOT built. Check the CMake output above."
+            exit 1
+          fi
 
       - name: Package the Build
         run: |
